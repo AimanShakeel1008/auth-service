@@ -1,0 +1,35 @@
+# Java / Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+*.swp
+*~.nib
+*.class
+
+# Spring Boot config secrets
+/*.keystore
+/*.jks
+/*.p12
+env.properties
+.env
+
+# Testcontainers tmp dirs
+/testcontainers-*/
+
+# Docker
+docker-compose.override.yml
