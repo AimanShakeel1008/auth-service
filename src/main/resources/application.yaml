@@ -1,17 +1,27 @@
 spring:
   application:
     name: auth-service
+
+  # datasource values intentionally referenced via environment variables
   datasource:
-    url: jdbc:postgresql://localhost:5432/authdb
-    username: auth_user
-    password: change_me
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:auth_service_db}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USERNAME:auth_admin}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:ChangeMePlease123!}}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      max-lifetime: 1800000
+      connection-init-sql: "SET TIME ZONE 'Asia/Kolkata'"
+
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: validate     # keep validate to enforce Flyway when you add it
     show-sql: false
 
 server:
-  port: 8081
+  port: ${SERVER_PORT:8081}
 
 management:
   endpoints:
@@ -21,3 +31,8 @@ management:
   endpoint:
     health:
       show-details: never
+
+# Logging and actuator settings can go here too (common)
+logging:
+  level:
+    root: INFO
