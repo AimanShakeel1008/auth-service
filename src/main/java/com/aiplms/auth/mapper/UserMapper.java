@@ -1,31 +1,34 @@
 package com.aiplms.auth.mapper;
 
-import com.aiplms.auth.config.MapStructConfig;
 import com.aiplms.auth.dto.v1.RegisterRequestDto;
 import com.aiplms.auth.dto.v1.UserResponseDto;
 import com.aiplms.auth.entity.User;
-import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
-import org.mapstruct.factory.Mappers;
+import org.mapstruct.*;
 
-@Mapper(config = MapStructConfig.class, componentModel = "spring")
+@Mapper(componentModel = "spring",
+        unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface UserMapper {
-    UserMapper INSTANCE = Mappers.getMapper(UserMapper.class);
 
-    // map RegisterRequestDto -> User (do not map password -> passwordHash directly here;
-    // prefer service to hash and set passwordHash; if you must, MapStruct can map raw password to passwordHash via custom methods)
+    /**
+     * Convert registration request into User entity (password hashing is done in service).
+     * ID must be assigned manually in service: user.setId(UUID.randomUUID()).
+     */
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "passwordHash", ignore = true)
-    @Mapping(target = "createdAt", expression = "java(java.time.Instant.now())")
+    @Mapping(target = "roles", ignore = true) // default roles assigned in service layer
     @Mapping(target = "emailVerified", constant = "false")
+    @Mapping(target = "enabled", constant = "true")
+    @Mapping(target = "failedLoginCount", constant = "0")
+    @Mapping(target = "lockedUntil", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
     User toUser(RegisterRequestDto dto);
 
-    // map User -> UserResponseDto
-    @Mapping(target = "id", source = "id")
-    @Mapping(target = "username", source = "username")
-    @Mapping(target = "email", source = "email")
-    @Mapping(target = "createdAt", source = "createdAt")
-    @Mapping(target = "emailVerified", source = "emailVerified")
-    UserResponseDto toUserResponseDto(User user);
+    /**
+     * Convert User entity to UserResponseDto.
+     * We skip `id` because entity uses UUID and DTO expects Long.
+     */
+    @Mapping(target = "id", ignore = true)
+    UserResponseDto toUserResponse(User user);
 }
+
 
