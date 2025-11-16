@@ -30,6 +30,13 @@ public class User {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
+    @PrePersist
+    public void prePersist() {
+        if (this.id == null) {
+            this.id = UUID.randomUUID();
+        }
+    }
+
     @Column(name = "username", length = 100, nullable = false)
     private String username;
 
