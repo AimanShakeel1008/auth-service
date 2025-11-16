@@ -14,7 +14,15 @@
 		<java.version>17</java.version>
 		<spring.boot.version>3.2.2</spring.boot.version>
 		<mapstruct.version>1.5.5.Final</mapstruct.version>
+
+		<!-- Build / encoding -->
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<maven.compiler.release>${java.version}</maven.compiler.release>
+
+		<!-- Plugin versions -->
+		<maven.compiler.plugin.version>3.11.0</maven.compiler.plugin.version>
+		<maven.resources.plugin.version>3.3.1</maven.resources.plugin.version>
+		<maven.surefire.plugin.version>3.0.0-M8</maven.surefire.plugin.version>
 	</properties>
 
 	<dependencyManagement>
@@ -96,11 +104,11 @@
 
 	<build>
 		<plugins>
-			<!-- Compiler plugin -->
+			<!-- Compiler plugin (explicit version + settings) -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.11.0</version>
+				<version>${maven.compiler.plugin.version}</version>
 				<configuration>
 					<release>${maven.compiler.release}</release>
 					<annotationProcessorPaths>
@@ -115,13 +123,48 @@
 							<version>1.18.28</version>
 						</path>
 					</annotationProcessorPaths>
+					<encoding>${project.build.sourceEncoding}</encoding>
 				</configuration>
 			</plugin>
 
-			<!-- Spring Boot -->
+			<!-- Resources plugin: enforce UTF-8 encoding -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-resources-plugin</artifactId>
+				<version>${maven.resources.plugin.version}</version>
+				<configuration>
+					<encoding>${project.build.sourceEncoding}</encoding>
+				</configuration>
+			</plugin>
+
+			<!-- Surefire plugin for tests -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>${maven.surefire.plugin.version}</version>
+			</plugin>
+
+			<!-- Spring Boot plugin - repackage to executable jar and explicit version -->
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<version>${spring.boot.version}</version>
+				<executions>
+					<execution>
+						<goals>
+							<goal>repackage</goal>
+						</goals>
+					</execution>
+				</executions>
+				<configuration>
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+					<!-- optional: allow Spring Boot to auto-detect main class -->
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
