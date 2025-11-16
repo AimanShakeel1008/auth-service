@@ -1,4 +1,4 @@
-package com.aiplms.auth.respository;
+package com.aiplms.auth.repository;
 
 import com.aiplms.auth.entity.Role;
 import org.springframework.data.jpa.repository.JpaRepository;
