@@ -1,6 +1,7 @@
 package com.aiplms.auth.controller;
 
 import com.aiplms.auth.dto.v1.ApiResponse;
+import com.aiplms.auth.dto.v1.LoginRequestDto;
 import com.aiplms.auth.dto.v1.RegisterRequestDto;
 import com.aiplms.auth.service.AuthService;
 import jakarta.validation.Valid;
@@ -23,5 +24,13 @@ public class AuthController {
         ApiResponse<Map<String, Object>> body = new ApiResponse<>("AUTH_001", "User registered successfully", data);
         return ResponseEntity.ok(body);
     }
+
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> login(@Valid @RequestBody LoginRequestDto request) {
+        Map<String, Object> data = authService.login(request);
+        ApiResponse<Map<String, Object>> body = new ApiResponse<>("AUTH_002", "Login successful", data);
+        return ResponseEntity.ok(body);
+    }
+
 }
 
