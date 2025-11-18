@@ -1,5 +1,6 @@
 package com.aiplms.auth.service;
 
+import com.aiplms.auth.dto.v1.LoginRequestDto;
 import com.aiplms.auth.dto.v1.RegisterRequestDto;
 import com.aiplms.auth.entity.Role;
 import com.aiplms.auth.entity.User;
@@ -71,5 +72,33 @@ public class AuthServiceImpl implements AuthService {
         data.put("email", saved.getEmail());
         return data;
     }
+
+
+    @Override
+    public Map<String, Object> login(LoginRequestDto request) {
+        // find by username or email
+        User user = userRepository.findByUsernameIgnoreCase(request.getUsernameOrEmail())
+                .or(() -> userRepository.findByEmailIgnoreCase(request.getUsernameOrEmail()))
+                .orElseThrow(() -> Exceptions.unauthorized("Invalid credentials"));
+
+        // check enabled
+        if (!Boolean.TRUE.equals(user.isEnabled())) {
+            throw Exceptions.unauthorized("User account is disabled");
+        }
+
+        // password verification
+        boolean matches = passwordEncoder.matches(request.getPassword(), user.getPassword());
+        if (!matches) {
+            // TODO: increment failed login count (Step 18)
+            throw Exceptions.unauthorized("Invalid credentials");
+        }
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", user.getId());
+        data.put("username", user.getUsername());
+        data.put("email", user.getEmail());
+        return data;
+    }
+
 }
 
