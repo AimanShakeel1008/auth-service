@@ -8,6 +8,7 @@ import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -29,16 +30,17 @@ public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String MDC_SUPPORT_ID = "supportId";
 
+
     @ExceptionHandler(BaseException.class)
     @ResponseBody
-    public ErrorResponse handleBaseException(BaseException ex, HttpServletRequest request) {
+    public ResponseEntity<ErrorResponse> handleBaseException(BaseException ex, HttpServletRequest request) {
         // generate supportId for correlation (helpful when user reports an error)
         String supportId = UUID.randomUUID().toString();
         // log exception at WARN/INFO depending on status
         log.warn("Handled BaseException supportId={} status={} errorCode={} message={}",
                 supportId, ex.getHttpStatus().value(), ex.getErrorCode(), ex.getMessage());
 
-        return ErrorResponse.builder()
+        ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(OffsetDateTime.now(ZoneOffset.UTC))
                 .status(ex.getHttpStatus().value())
                 .errorCode(ex.getErrorCode())
@@ -46,6 +48,8 @@ public class GlobalExceptionHandler {
                 .path(request.getRequestURI())
                 .supportId(supportId)
                 .build();
+
+        return ResponseEntity.status(ex.getHttpStatus()).body(errorResponse);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
