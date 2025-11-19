@@ -7,6 +7,7 @@ import com.aiplms.auth.entity.User;
 import com.aiplms.auth.exception.Exceptions;
 import com.aiplms.auth.repository.RoleRepository;
 import com.aiplms.auth.repository.UserRepository;
+import com.aiplms.auth.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,8 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+
 
     @Override
     @Transactional
@@ -70,6 +73,7 @@ public class AuthServiceImpl implements AuthService {
         data.put("id", saved.getId());
         data.put("username", saved.getUsername());
         data.put("email", saved.getEmail());
+
         return data;
     }
 
@@ -97,6 +101,11 @@ public class AuthServiceImpl implements AuthService {
         data.put("id", user.getId());
         data.put("username", user.getUsername());
         data.put("email", user.getEmail());
+
+        JwtService.AccessToken accessToken = jwtService.createAccessToken(user);
+        data.put("accessToken", accessToken.getToken());
+        data.put("accessTokenExpiresAt", accessToken.getExpiresAtIso());
+
         return data;
     }
 
