@@ -21,6 +21,16 @@ spring:
     locations: classpath:db/migration
     baseline-on-migration: true
 
+# JWT (HS256) - Step 9 initial configuration
+auth:
+  jwt:
+    # For HS256 this is a shared secret. In prod later we switch to RS256.
+    # MUST be provided by environment in deploy. Example below is for local/dev only.
+    secret: ${AUTH_JWT_SECRET:ChangeThisSuperSecretKeyForLocalOnlyPleaseReplace}
+    # Token TTL in seconds (e.g. 900 = 15 minutes)
+    access-token-ttl-seconds: ${AUTH_JWT_ACCESS_TTL:900}
+
+
 logging:
   level:
     root: INFO
