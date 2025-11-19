@@ -30,6 +30,8 @@ auth:
     # Token TTL in seconds (e.g. 900 = 15 minutes)
     access-token-ttl-seconds: ${AUTH_JWT_ACCESS_TTL:900}
 
+  refresh-token-ttl-days: ${AUTH_REFRESH_TOKEN_TTL:30d}
+
 
 logging:
   level:
