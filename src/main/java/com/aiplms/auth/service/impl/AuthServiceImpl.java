@@ -1,5 +1,6 @@
-package com.aiplms.auth.service;
+package com.aiplms.auth.service.impl;
 
+import com.aiplms.auth.config.AuthProperties;
 import com.aiplms.auth.dto.v1.LoginRequestDto;
 import com.aiplms.auth.dto.v1.RegisterRequestDto;
 import com.aiplms.auth.entity.Role;
@@ -8,16 +9,19 @@ import com.aiplms.auth.exception.Exceptions;
 import com.aiplms.auth.repository.RoleRepository;
 import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtService;
+import com.aiplms.auth.service.AuthService;
+import com.aiplms.auth.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -27,7 +31,8 @@ public class AuthServiceImpl implements AuthService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-
+    private final RefreshTokenService refreshTokenService;
+    private final AuthProperties authProperties;
 
     @Override
     @Transactional
@@ -70,9 +75,19 @@ public class AuthServiceImpl implements AuthService {
         User saved = userRepository.save(user);
 
         Map<String, Object> data = new HashMap<>();
+
         data.put("id", saved.getId());
         data.put("username", saved.getUsername());
         data.put("email", saved.getEmail());
+
+        JwtService.AccessToken accessToken = jwtService.createAccessToken(user);
+        data.put("accessToken", accessToken.getToken());
+        data.put("accessTokenExpiresAt", accessToken.getExpiresAtIso());
+
+        Instant refreshExpiry = Instant.now().plus(authProperties.getRefreshTokenTtl());
+        RefreshTokenService.CreateResult rtResult = refreshTokenService.createForUser(user, refreshExpiry);
+        data.put("refreshToken", rtResult.getPlainToken());
+        data.put("refreshTokenExpiresAt", refreshExpiry.toString());
 
         return data;
     }
@@ -105,6 +120,11 @@ public class AuthServiceImpl implements AuthService {
         JwtService.AccessToken accessToken = jwtService.createAccessToken(user);
         data.put("accessToken", accessToken.getToken());
         data.put("accessTokenExpiresAt", accessToken.getExpiresAtIso());
+
+        Instant refreshExpiry = Instant.now().plus(30, ChronoUnit.DAYS); // example: 30 days
+        RefreshTokenService.CreateResult rtResult = refreshTokenService.createForUser(user, refreshExpiry);
+        data.put("refreshToken", rtResult.getPlainToken());
+        data.put("refreshTokenExpiresAt", refreshExpiry.toString());
 
         return data;
     }
