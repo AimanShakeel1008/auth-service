@@ -1,20 +1,23 @@
 package com.aiplms.auth.controller;
 
-import com.aiplms.auth.dto.v1.ApiResponse;
-import com.aiplms.auth.dto.v1.LoginRequestDto;
-import com.aiplms.auth.dto.v1.RegisterRequestDto;
-import com.aiplms.auth.dto.v1.UserResponseDto;
-import com.aiplms.auth.entity.User;
+import com.aiplms.auth.config.AuthProperties;
+import com.aiplms.auth.dto.v1.*;
+import com.aiplms.auth.entity.RefreshToken;
 import com.aiplms.auth.exception.Exceptions;
 import com.aiplms.auth.mapper.UserMapper;
 import com.aiplms.auth.repository.UserRepository;
+import com.aiplms.auth.security.JwtService;
 import com.aiplms.auth.service.AuthService;
+import com.aiplms.auth.service.RefreshTokenService;
+import com.aiplms.auth.util.TokenUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
 @RestController
@@ -25,6 +28,10 @@ public class AuthController {
     private final AuthService authService;
     private final UserRepository userRepository;
     private final UserMapper userMapper;
+    private final RefreshTokenService refreshTokenService;
+    private final JwtService jwtService;
+    private final AuthProperties authProperties;
+
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<Map<String, Object>>> register(@Valid @RequestBody RegisterRequestDto request) {
@@ -61,6 +68,63 @@ public class AuthController {
         var dto = userMapper.toUserResponse(user);
 
         var body = new ApiResponse<>("AUTH_011", "Current user retrieved", dto);
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Refresh endpoint with rotation.
+     */
+    @PostMapping("/token/refresh")
+    public ResponseEntity<ApiResponse<TokenResponseDto>> refreshToken(
+            @Valid @RequestBody RefreshRequestDto request
+    ) {
+        String incoming = request.getRefreshToken();
+        if (incoming == null || incoming.isBlank()) {
+            throw Exceptions.badRequest("Missing refresh token");
+        }
+
+        // compute hash using TokenUtil (existing util)
+        String hash = TokenUtil.sha256Hex(incoming);
+
+        // find persisted refresh token by hash
+        var opt = refreshTokenService.findByHash(hash);
+        if (opt.isEmpty()) {
+            // token not found -> invalid or reuse
+            throw Exceptions.unauthorized("Invalid refresh token");
+        }
+
+        RefreshToken stored = opt.get();
+
+        // check revoked / expired
+        if (stored.isRevoked()) {
+            // possible reuse / replay — return unauthorized
+            // TODO: log details for audit; optionally revoke all tokens for user
+            throw Exceptions.unauthorized("Refresh token has been revoked");
+        }
+
+        if (stored.getExpiresAt().isBefore(Instant.now())) {
+            // expired
+            throw Exceptions.unauthorized("Refresh token expired");
+        }
+
+        // rotation: revoke current token
+        refreshTokenService.revoke(stored);
+
+        // create new refresh token (expiry using authProperties or a TTL; AuthServiceImpl uses authProperties)
+        Instant newExpiry = Instant.now().plus(authProperties.getRefreshTokenTtl());
+        var createResult = refreshTokenService.createForUser(stored.getUser(), newExpiry);
+
+        // create new access token
+        JwtService.AccessToken accessToken = jwtService.createAccessToken(stored.getUser());
+
+        TokenResponseDto resp = new TokenResponseDto(
+                accessToken.getToken(),
+                accessToken.getExpiresAtIso(),
+                createResult.getPlainToken(),
+                newExpiry.toString()
+        );
+
+        var body = new ApiResponse<>("AUTH_013", "Token refreshed", resp);
         return ResponseEntity.ok(body);
     }
 
