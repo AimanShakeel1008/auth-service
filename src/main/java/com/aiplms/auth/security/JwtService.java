@@ -1,113 +1,152 @@
 package com.aiplms.auth.security;
 
 import com.aiplms.auth.entity.User;
-
-import com.nimbusds.jose.*;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWSVerifier;
 import com.nimbusds.jose.crypto.MACSigner;
+import com.nimbusds.jose.crypto.MACVerifier;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Date;
+import java.util.Map;
 
 /**
- * JwtService: creates HS256 signed access tokens using Nimbus (10.0.2).
+ * Minimal JWT helper for HS256 usage (Step 9/10).
  *
- * Note: For production use a properly managed secret (>=32 bytes) and later migrate to RS256.
+ * Produces tokens (createAccessToken) and validates/parses them (parseAndValidate).
+ *
+ * IMPORTANT: In later steps you'll switch to RS256 and JWKS. This implementation is deliberately minimal
+ * for Step-9/10's HS256 approach.
  */
-@Component
 @Slf4j
+@Component
 public class JwtService {
 
-    private final byte[] sharedSecret;
-    private final long accessTokenTtlSeconds;
+    @Value("${auth.jwt.secret}")
+    private String sharedSecret;
 
-    public JwtService(
-            @Value("${auth.jwt.secret}") String secret,
-            @Value("${auth.jwt.access-token-ttl-seconds}") long accessTokenTtlSeconds) {
-        if (secret == null || secret.length() < 32) {
-            log.warn("JWT secret length is less than 32 chars — ensure you override it in production!");
-        }
-        this.sharedSecret = secret.getBytes();
-        this.accessTokenTtlSeconds = accessTokenTtlSeconds;
-    }
+    @Value("${auth.jwt.access-token-ttl-seconds:900}")
+    private long accessTokenTtlSeconds;
 
+    private static final DateTimeFormatter ISO_FORMAT =
+            DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneOffset.UTC);
+
+    @Getter
     public static class AccessToken {
         private final String token;
-        private final Instant expiresAt;
+        private final String expiresAtIso;
 
         public AccessToken(String token, Instant expiresAt) {
             this.token = token;
-            this.expiresAt = expiresAt;
+            this.expiresAtIso = ISO_FORMAT.format(expiresAt);
         }
 
         public String getToken() {
             return token;
         }
 
-        public Instant getExpiresAt() {
-            return expiresAt;
-        }
-
         public String getExpiresAtIso() {
-            return DateTimeFormatter.ISO_OFFSET_DATE_TIME.withZone(ZoneOffset.UTC).format(expiresAt);
+            return expiresAtIso;
         }
     }
 
+    public static class JwtValidationException extends RuntimeException {
+        public JwtValidationException(String msg) { super(msg); }
+        public JwtValidationException(String msg, Throwable cause) { super(msg, cause); }
+    }
+
     /**
-     * Create HS256 signed access token for given user.
-     *
-     * @param user user entity (must have id, username, email; roles optional)
-     * @return AccessToken containing token string and expiry instant (UTC)
+     * Create an HS256 signed JWT for the given user.
      */
     public AccessToken createAccessToken(User user) {
         try {
             Instant now = Instant.now();
             Instant expiresAt = now.plusSeconds(accessTokenTtlSeconds);
 
-            JWTClaimsSet.Builder claimsBuilder = new JWTClaimsSet.Builder()
-                    .subject(String.valueOf(user.getId()))
+            JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder()
+                    .subject(user.getId().toString())
                     .issueTime(Date.from(now))
                     .expirationTime(Date.from(expiresAt))
-                    .claim("preferred_username", user.getUsername())
+                    .claim("id", user.getId().toString())
+                    .claim("username", user.getUsername())
                     .claim("email", user.getEmail());
 
-            // Attach roles if available
-            if (user.getRoles() != null && !user.getRoles().isEmpty()) {
-                List<String> roleNames = new ArrayList<>();
-                user.getRoles().forEach(role -> {
-                    if (role != null && role.getName() != null) {
-                        roleNames.add(role.getName());
-                    }
-                });
-                claimsBuilder.claim("roles", Collections.unmodifiableList(roleNames));
-            }
+            JWTClaimsSet claimsSet = claims.build();
 
-            JWTClaimsSet claims = claimsBuilder.build();
+            com.nimbusds.jose.JWSSigner signer = new MACSigner(sharedSecret.getBytes(StandardCharsets.UTF_8));
+            com.nimbusds.jose.JWSHeader header = new com.nimbusds.jose.JWSHeader(com.nimbusds.jose.JWSAlgorithm.HS256);
 
-            // Create the SignedJWT with HS256 header
-            JWSHeader header = new JWSHeader.Builder(JWSAlgorithm.HS256)
-                    .type(JOSEObjectType.JWT)
-                    .build();
-
-            SignedJWT signedJWT = new SignedJWT(header, claims);
-
-            // Sign with HMAC signer using shared secret bytes
-            JWSSigner signer = new MACSigner(sharedSecret);
+            SignedJWT signedJWT = new SignedJWT(header, claimsSet);
             signedJWT.sign(signer);
 
-            String token = signedJWT.serialize();
-            return new AccessToken(token, expiresAt);
+            return new AccessToken(signedJWT.serialize(), expiresAt);
         } catch (JOSEException e) {
             log.error("Failed to create JWT access token", e);
             throw new RuntimeException("Failed to create JWT access token", e);
         }
     }
-}
 
+    /**
+     * Parse and validate token, returning a wrapper with easy access to claims.
+     * Throws JwtValidationException on any problem (signature, expiry, parse error).
+     */
+    public JwtClaims parseAndValidate(String token) {
+        try {
+            SignedJWT signedJWT = SignedJWT.parse(token);
+
+            JWSVerifier verifier = new MACVerifier(sharedSecret.getBytes(StandardCharsets.UTF_8));
+            boolean verified = signedJWT.verify(verifier);
+            if (!verified) {
+                throw new JwtValidationException("Invalid JWT signature");
+            }
+
+            JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+
+            Date exp = claims.getExpirationTime();
+            if (exp == null) {
+                throw new JwtValidationException("Missing exp claim");
+            }
+            if (exp.before(new Date())) {
+                throw new JwtValidationException("JWT token expired");
+            }
+
+            return new JwtClaims(claims);
+        } catch (ParseException | JOSEException e) {
+            throw new JwtValidationException("Failed to parse/validate JWT", e);
+        }
+    }
+
+    /**
+     * Lightweight wrapper around JWTClaimsSet for simpler use.
+     */
+    public static class JwtClaims {
+        private final JWTClaimsSet inner;
+
+        JwtClaims(JWTClaimsSet inner) {
+            this.inner = inner;
+        }
+
+        public String getClaimAsString(String name) {
+            Object v = inner.getClaim(name);
+            return v == null ? null : v.toString();
+        }
+
+        public Map<String, Object> getAllClaims() {
+            return inner.getClaims();
+        }
+
+        public String getSubject() {
+            return inner.getSubject();
+        }
+    }
+}
