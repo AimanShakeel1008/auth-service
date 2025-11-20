@@ -9,9 +9,12 @@ import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtService;
 import com.aiplms.auth.service.AuthService;
 import com.aiplms.auth.service.RefreshTokenService;
+import com.aiplms.auth.service.TokenBlacklistService;
 import com.aiplms.auth.util.TokenUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +26,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final AuthService authService;
@@ -31,6 +35,7 @@ public class AuthController {
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
     private final AuthProperties authProperties;
+    private final TokenBlacklistService tokenBlacklistService;
 
 
     @PostMapping("/register")
@@ -128,6 +133,43 @@ public class AuthController {
         return ResponseEntity.ok(body);
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(
+            @Valid @RequestBody LogoutRequestDto request,
+            HttpServletRequest httpRequest,
+            @RequestHeader(name = "Authorization", required = false) String authorizationHeader
+    ) {
+        // 1) Blacklist access token from Authorization header (if present)
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            String accessToken = authorizationHeader.substring(7).trim();
+            try {
+                // delegate to blacklist service
+                tokenBlacklistService.blacklistAccessToken(accessToken);
+            } catch (Exception ex) {
+                // do not fail logout if blacklist fails; log and continue (but surface mild error if you want)
+                log.warn("Failed to blacklist access token during logout", ex);
+            }
+        }
 
+        // 2) Revoke refresh token if provided
+        if (request != null && request.getRefreshToken() != null && !request.getRefreshToken().isBlank()) {
+            String providedRefresh = request.getRefreshToken();
+            String hash = TokenUtil.sha256Hex(providedRefresh);
+            java.util.Optional<RefreshToken> refreshOpt = refreshTokenService.findByHash(hash);
+            if (refreshOpt.isPresent()) {
+                // revoke via refresh token service
+                refreshTokenService.revoke(refreshOpt.get());
+            } else {
+                // no-op if not found
+                log.debug("Logout requested for unknown refresh token (hash={})", hash);
+            }
+        }
+
+        // 3) Clear Spring Security context for safety
+        SecurityContextHolder.clearContext();
+
+        var body = new ApiResponse<>("AUTH_014", "Logged out", null);
+        return ResponseEntity.ok(body);
+    }
 }
 

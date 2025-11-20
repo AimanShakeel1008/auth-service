@@ -1,7 +1,9 @@
 package com.aiplms.auth.security;
 
 import com.aiplms.auth.entity.User;
+import com.aiplms.auth.exception.Exceptions;
 import com.aiplms.auth.repository.UserRepository;
+import com.aiplms.auth.service.TokenBlacklistService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.lang.NonNull;
@@ -26,6 +28,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(
@@ -43,6 +46,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             String token = header.substring(7);
             JwtService.JwtClaims claims = jwtService.parseAndValidate(token);
+
+            if (tokenBlacklistService.isBlacklisted(token)) {
+                throw Exceptions.unauthorized("Access token revoked");
+            }
 
             // Expecting "id" claim (UUID) as created in AuthServiceImpl
             String idStr = claims.getClaimAsString("id");
