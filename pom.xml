@@ -74,6 +74,11 @@
 			<version>10.0.2</version>
 		</dependency>
 
+		<!-- Redis (Spring Data Redis + Lettuce client) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
 
 		<!-- Validation -->
 		<dependency>

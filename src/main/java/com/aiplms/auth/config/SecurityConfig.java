@@ -4,6 +4,7 @@ import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtAuthenticationEntryPoint;
 import com.aiplms.auth.security.JwtAuthenticationFilter;
 import com.aiplms.auth.security.JwtService;
+import com.aiplms.auth.service.TokenBlacklistService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -22,10 +23,12 @@ public class SecurityConfig {
     private final JwtService jwtService;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final TokenBlacklistService tokenBlacklistService;
+
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter(jwtService, userRepository);
+        return new JwtAuthenticationFilter(jwtService, userRepository, tokenBlacklistService);
     }
 
     @Bean
