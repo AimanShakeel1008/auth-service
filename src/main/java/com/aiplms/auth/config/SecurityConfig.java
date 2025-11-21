@@ -4,6 +4,8 @@ import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtAuthenticationEntryPoint;
 import com.aiplms.auth.security.JwtAuthenticationFilter;
 import com.aiplms.auth.security.JwtService;
+import com.aiplms.auth.security.RateLimitingFilter;
+import com.aiplms.auth.service.RedisTokenBucketService;
 import com.aiplms.auth.service.TokenBlacklistService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -24,11 +26,17 @@ public class SecurityConfig {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final TokenBlacklistService tokenBlacklistService;
+    private final RedisTokenBucketService redisTokenBucketService;
 
 
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
         return new JwtAuthenticationFilter(jwtService, userRepository, tokenBlacklistService);
+    }
+
+    @Bean
+    public RateLimitingFilter rateLimitingFilter() {
+        return new RateLimitingFilter(redisTokenBucketService);
     }
 
     @Bean
@@ -64,10 +72,12 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable);
 
         // Add JWT filter before UsernamePasswordAuthenticationFilter
+        http.addFilterBefore(rateLimitingFilter(), UsernamePasswordAuthenticationFilter.class);
+
+        // --- JWT AUTH FILTER: ensure this is still present and runs before UsernamePasswordAuthenticationFilter
         http.addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 }
-
 
