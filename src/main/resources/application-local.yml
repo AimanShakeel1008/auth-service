@@ -47,6 +47,8 @@ auth:
     access-token-ttl-seconds: ${AUTH_JWT_ACCESS_TTL:900}
 
   refresh-token-ttl-days: ${AUTH_REFRESH_TOKEN_TTL:30d}
+  max-failed-attempts: ${MAX_FAILED_ATTEMPTS:5}
+  lockout-duration: ${LOCKOUT_DURATION:15m}
 
 
 logging:

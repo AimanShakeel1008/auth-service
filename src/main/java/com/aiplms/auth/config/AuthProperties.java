@@ -23,4 +23,16 @@ public class AuthProperties {
      */
     private Duration refreshTokenTtl = Duration.ofDays(30);
 
+    /**
+     * Maximum allowed consecutive failed login attempts before account gets locked.
+     * Default: 5.
+     */
+    private int maxFailedAttempts = 5;
+
+    /**
+     * Duration for which the account will remain locked once threshold is reached.
+     * Default: 15 minutes.
+     */
+    private Duration lockoutDuration = Duration.ofMinutes(15);
+
 }

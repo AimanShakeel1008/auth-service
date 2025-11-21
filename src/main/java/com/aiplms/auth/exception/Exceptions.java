@@ -20,5 +20,13 @@ public final class Exceptions {
     public static BaseException internal(String detail) {
         return new BaseException("AUTH_ERR_INTERNAL", HttpStatus.INTERNAL_SERVER_ERROR, detail);
     }
+
+    /**
+     * Account locked due to repeated failed login attempts.
+     */
+    public static BaseException accountLocked(String detail) {
+        return new BaseException("AUTH_ERR_ACCOUNT_LOCKED", HttpStatus.FORBIDDEN, detail);
+    }
+
 }
 
