@@ -36,7 +36,6 @@ public class AuthServiceImpl implements AuthService {
     private final AuthProperties authProperties;
     private final EmailVerificationService emailVerificationService;
 
-
     @Override
     @Transactional
     public Map<String, Object> register(RegisterRequestDto request) {
@@ -99,7 +98,6 @@ public class AuthServiceImpl implements AuthService {
         return data;
     }
 
-
     @Override
     public Map<String, Object> login(LoginRequestDto request) {
         // find by username or email
@@ -113,15 +111,44 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (Boolean.FALSE.equals(user.isEmailVerified())) {
-            // uniform error format via your Exceptions helper
+            // uniform error format via Exceptions helper
             throw Exceptions.unauthorized("Email not verified. Please check your inbox or request a resend.");
+        }
+
+        // Check if account is locked
+        Instant lockedUntil = user.getLockedUntil();
+        if (lockedUntil != null && lockedUntil.isAfter(Instant.now())) {
+            String msg = String.format("Account is locked until %s", lockedUntil.toString());
+            throw Exceptions.accountLocked(msg);
         }
 
         // password verification
         boolean matches = passwordEncoder.matches(request.getPassword(), user.getPassword());
         if (!matches) {
-            // TODO: increment failed login count (Step 18)
-            throw Exceptions.unauthorized("Invalid credentials");
+            // increment failed login count and persist
+            int failed = user.getFailedLoginCount() + 1;
+            user.setFailedLoginCount(failed);
+
+            // if threshold reached -> lock account
+            if (failed >= authProperties.getMaxFailedAttempts()) {
+                Instant until = Instant.now().plus(authProperties.getLockoutDuration());
+                user.setLockedUntil(until);
+                user.setFailedLoginCount(0); // reset counter after locking
+                userRepository.save(user);
+
+                String msg = String.format("Account locked due to repeated failed login attempts. Locked until: %s", until.toString());
+                throw Exceptions.accountLocked(msg);
+            } else {
+                userRepository.save(user);
+                throw Exceptions.unauthorized("Invalid credentials");
+            }
+        }
+
+        // Successful login: reset failed count and lockedUntil if set
+        if (user.getFailedLoginCount() != 0 || user.getLockedUntil() != null) {
+            user.setFailedLoginCount(0);
+            user.setLockedUntil(null);
+            userRepository.save(user);
         }
 
         Map<String, Object> data = new HashMap<>();
@@ -142,4 +169,3 @@ public class AuthServiceImpl implements AuthService {
     }
 
 }
-
