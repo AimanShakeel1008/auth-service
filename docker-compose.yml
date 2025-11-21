@@ -5,6 +5,7 @@ services:
     container_name: authsvc-app
     depends_on:
       - postgres
+      - mailhog
     env_file:
       - .env
     ports:
@@ -43,6 +44,16 @@ services:
     command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
       - redis-data:/data
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: authsvc-mailhog
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # web UI
+      - "1025:1025"   # SMTP
+    environment:
+      - MH_UI_BIND_ADDR=0.0.0.0:8025
+      - MH_SMTP_BIND_ADDR=0.0.0.0:1025
 
 volumes:
   pgdata_authsvc:

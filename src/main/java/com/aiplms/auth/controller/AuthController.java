@@ -3,11 +3,13 @@ package com.aiplms.auth.controller;
 import com.aiplms.auth.config.AuthProperties;
 import com.aiplms.auth.dto.v1.*;
 import com.aiplms.auth.entity.RefreshToken;
+import com.aiplms.auth.exception.ErrorResponse;
 import com.aiplms.auth.exception.Exceptions;
 import com.aiplms.auth.mapper.UserMapper;
 import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtService;
 import com.aiplms.auth.service.AuthService;
+import com.aiplms.auth.service.EmailVerificationService;
 import com.aiplms.auth.service.RefreshTokenService;
 import com.aiplms.auth.service.TokenBlacklistService;
 import com.aiplms.auth.util.TokenUtil;
@@ -20,6 +22,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 
@@ -36,6 +39,8 @@ public class AuthController {
     private final JwtService jwtService;
     private final AuthProperties authProperties;
     private final TokenBlacklistService tokenBlacklistService;
+    private final EmailVerificationService emailVerificationService;
+
 
 
     @PostMapping("/register")
@@ -171,5 +176,25 @@ public class AuthController {
         var body = new ApiResponse<>("AUTH_014", "Logged out", null);
         return ResponseEntity.ok(body);
     }
+
+    @GetMapping("/verify-email")
+    public ResponseEntity<?> verifyEmail(@RequestParam("token") String token, HttpServletRequest request) {
+        boolean ok = emailVerificationService.verifyToken(token);
+        if (!ok) {
+
+            var err = ErrorResponse.builder()
+                    .timestamp(OffsetDateTime.now())
+                    .status(400).errorCode("AUTH_ERR_015")
+                    .message("Invalid or expired verification token")
+                    .path(request.getRequestURI())
+                    .build();
+
+            return ResponseEntity.badRequest().body(err);
+        }
+
+        var body = new ApiResponse<>("AUTH_015", "Email verified successfully", null);
+        return ResponseEntity.ok(body);
+    }
+
 }
 

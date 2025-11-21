@@ -23,6 +23,19 @@ spring:
   redis:
     host: redis
     port: 6379
+  mail:
+    host: ${MAIL_HOST:mailhog}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+app:
+  base-url: ${APP_BASE_URL:http://localhost:8081}
 
 # JWT (HS256) - Step 9 initial configuration
 auth:

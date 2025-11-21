@@ -10,6 +10,7 @@ import com.aiplms.auth.repository.RoleRepository;
 import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtService;
 import com.aiplms.auth.service.AuthService;
+import com.aiplms.auth.service.EmailVerificationService;
 import com.aiplms.auth.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -33,6 +34,8 @@ public class AuthServiceImpl implements AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final AuthProperties authProperties;
+    private final EmailVerificationService emailVerificationService;
+
 
     @Override
     @Transactional
@@ -74,11 +77,15 @@ public class AuthServiceImpl implements AuthService {
 
         User saved = userRepository.save(user);
 
+        // create verification token & send email
+        String verificationToken = emailVerificationService.createAndSendToken(saved);
+
         Map<String, Object> data = new HashMap<>();
 
         data.put("id", saved.getId());
         data.put("username", saved.getUsername());
         data.put("email", saved.getEmail());
+        data.put("message", "Verification email sent. Please check your inbox.");
 
         JwtService.AccessToken accessToken = jwtService.createAccessToken(user);
         data.put("accessToken", accessToken.getToken());
@@ -103,6 +110,11 @@ public class AuthServiceImpl implements AuthService {
         // check enabled
         if (!Boolean.TRUE.equals(user.isEnabled())) {
             throw Exceptions.unauthorized("User account is disabled");
+        }
+
+        if (Boolean.FALSE.equals(user.isEmailVerified())) {
+            // uniform error format via your Exceptions helper
+            throw Exceptions.unauthorized("Email not verified. Please check your inbox or request a resend.");
         }
 
         // password verification
