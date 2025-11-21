@@ -8,10 +8,7 @@ import com.aiplms.auth.exception.Exceptions;
 import com.aiplms.auth.mapper.UserMapper;
 import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtService;
-import com.aiplms.auth.service.AuthService;
-import com.aiplms.auth.service.EmailVerificationService;
-import com.aiplms.auth.service.RefreshTokenService;
-import com.aiplms.auth.service.TokenBlacklistService;
+import com.aiplms.auth.service.*;
 import com.aiplms.auth.util.TokenUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -40,6 +37,7 @@ public class AuthController {
     private final AuthProperties authProperties;
     private final TokenBlacklistService tokenBlacklistService;
     private final EmailVerificationService emailVerificationService;
+    private final PasswordResetService passwordResetService;
 
 
 
@@ -196,5 +194,53 @@ public class AuthController {
         return ResponseEntity.ok(body);
     }
 
+    /**
+     * Request password reset (send email with token).
+     */
+    @PostMapping("/password-reset/request")
+    public ResponseEntity<?> passwordResetRequest(
+            @Valid @RequestBody PasswordResetRequestDto requestDto
+    ) {
+        // Do not reveal whether email exists. Service will send email if account exists.
+        passwordResetService.createAndSendToken(requestDto.getEmail());
+
+        var body = new ApiResponse<>("AUTH_016", "If an account with that email exists, a password reset link has been sent", null);
+        return ResponseEntity.ok(body);
+    }
+
+    /**
+     * Confirm password reset (token + new password).
+     */
+    @PostMapping("/password-reset/confirm")
+    public ResponseEntity<?> passwordResetConfirm(
+            @Valid @RequestBody PasswordResetConfirmRequestDto requestDto,
+            HttpServletRequest request
+    ) {
+        if (!requestDto.getNewPassword().equals(requestDto.getNewPasswordConfirm())) {
+            var err = ErrorResponse.builder()
+                    .timestamp(OffsetDateTime.now())
+                    .status(400)
+                    .errorCode("AUTH_ERR_016")
+                    .message("Passwords do not match")
+                    .path(request.getRequestURI())
+                    .build();
+            return ResponseEntity.badRequest().body(err);
+        }
+
+        boolean ok = passwordResetService.confirmReset(requestDto.getToken(), requestDto.getNewPassword());
+        if (!ok) {
+            var err = ErrorResponse.builder()
+                    .timestamp(OffsetDateTime.now())
+                    .status(400)
+                    .errorCode("AUTH_ERR_017")
+                    .message("Invalid or expired password reset token")
+                    .path(request.getRequestURI())
+                    .build();
+            return ResponseEntity.badRequest().body(err);
+        }
+
+        var body = new ApiResponse<>("AUTH_017", "Password has been reset successfully", null);
+        return ResponseEntity.ok(body);
+    }
 }
 
