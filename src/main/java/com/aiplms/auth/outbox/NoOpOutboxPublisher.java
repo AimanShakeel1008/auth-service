@@ -2,6 +2,7 @@ package com.aiplms.auth.outbox;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -11,6 +12,11 @@ import java.io.IOException;
  * It logs the message and treats it as published successfully.
  */
 @Component
+@ConditionalOnProperty(
+        name = "outbox.publisher",
+        havingValue = "noop",
+        matchIfMissing = true       // <—— ADD THIS
+)
 public class NoOpOutboxPublisher implements OutboxPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(NoOpOutboxPublisher.class);

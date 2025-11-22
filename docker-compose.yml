@@ -1,22 +1,7 @@
+version: '3.8'
+
 services:
-  auth-service:
-    build: .
-    image: auth-service:local
-    container_name: authsvc-app
-    depends_on:
-      - postgres
-      - mailhog
-    env_file:
-      - .env
-    ports:
-      - "8081:8081"
-    restart: unless-stopped
-    # optional healthcheck (calls actuator)
-    healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8081/actuator/health || exit 1" ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+
   postgres:
     image: postgres:15
     container_name: authsvc-postgres
@@ -30,32 +15,145 @@ services:
       - ./sql/init:/docker-entrypoint-initdb.d:ro
     ports:
       - "${POSTGRES_PORT}:5432"
+    networks:
+      - auth-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h 127.0.0.1 -p 5432"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U auth -d authdb"]
+      interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 10s
+
   redis:
-    image: redis:7.2
+    image: redis:7
     container_name: authsvc-redis
     restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
-    command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
-      - redis-data:/data
+      - redisdata:/data
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   mailhog:
     image: mailhog/mailhog:latest
     container_name: authsvc-mailhog
     restart: unless-stopped
-    ports:
-      - "8025:8025"   # web UI
-      - "1025:1025"   # SMTP
     environment:
-      - MH_UI_BIND_ADDR=0.0.0.0:8025
-      - MH_SMTP_BIND_ADDR=0.0.0.0:1025
+      MH_STORAGE: maildir
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sS http://localhost:8025 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.1
+    container_name: authsvc-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc -w 3 localhost 2181 | grep imok || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.1
+    container_name: authsvc-kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD", "bash", "-c", "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/localhost/9092' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: auth-service:local
+    container_name: authsvc-app
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://${POSTGRES_HOST:-localhost}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-authsvc_db}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-authsvc_user}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-ChangeMeStrongP@ssw0rd}
+
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+
+      OUTBOX_PUBLISHER: ${OUTBOX_PUBLISHER:-kafka}
+      OUTBOX_KAFKA_TOPIC: ${OUTBOX_KAFKA_TOPIC:-auth.events}
+      KAFKA_BOOTSTRAP: ${KAFKA_BOOTSTRAP:-kafka:9092}
+
+      SPRING_MAIL_HOST: mailhog
+      SPRING_MAIL_PORT: 1025
+
+      SPRING_PROFILES_ACTIVE: docker,local
+
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+
+    ports:
+      - "8081:8081"
+    networks:
+      - auth-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+networks:
+  auth-network:
+    driver: bridge
 
 volumes:
   pgdata_authsvc:
     driver: local
-  redis-data:
+  redisdata:
+  kafka_data:
