@@ -50,6 +50,10 @@ auth:
   max-failed-attempts: ${MAX_FAILED_ATTEMPTS:5}
   lockout-duration: ${LOCKOUT_DURATION:15m}
 
+outbox:
+  poll-interval-ms: 2000    # poll every 2s for faster test feedback
+  batch-size: 50
+  max-retries: 3
 
 logging:
   level:
