@@ -11,6 +11,7 @@ import com.aiplms.auth.repository.UserRepository;
 import com.aiplms.auth.security.JwtService;
 import com.aiplms.auth.service.AuthService;
 import com.aiplms.auth.service.EmailVerificationService;
+import com.aiplms.auth.service.OutboxService;
 import com.aiplms.auth.service.RefreshTokenService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,6 +36,8 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenService refreshTokenService;
     private final AuthProperties authProperties;
     private final EmailVerificationService emailVerificationService;
+    private final OutboxService outboxService;
+
 
     @Override
     @Transactional
@@ -75,6 +78,19 @@ public class AuthServiceImpl implements AuthService {
         } catch (Throwable ignored) {}
 
         User saved = userRepository.save(user);
+
+        // write outbox event for user created (transactional outbox)
+        try {
+            // build minimal payload (can be extended or use Avro/Schema later)
+            String outboxPayload = String.format("{\"id\":\"%s\",\"username\":\"%s\",\"email\":\"%s\"}",
+                    saved.getId(), saved.getUsername(), saved.getEmail());
+
+            // type includes version to allow event schema evolution, e.g. UserCreated_v1
+            outboxService.saveEvent("User", saved.getId(), "UserCreated_v1", outboxPayload);
+        } catch (Exception e) {
+            // Do NOT fail the registration if outbox write fails.
+            // But log the error in production (MDC/correlationId). Keep registration robust.
+        }
 
         // create verification token & send email
         String verificationToken = emailVerificationService.createAndSendToken(saved);
