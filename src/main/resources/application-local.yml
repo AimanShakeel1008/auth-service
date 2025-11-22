@@ -34,6 +34,10 @@ spring:
           auth: false
           starttls:
             enable: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
 app:
   base-url: ${APP_BASE_URL:http://localhost:8081}
 
@@ -54,6 +58,9 @@ outbox:
   poll-interval-ms: 2000    # poll every 2s for faster test feedback
   batch-size: 50
   max-retries: 3
+  publisher: ${OUTBOX_PUBLISHER:noop} # set to 'kafka' to enable Kafka outbox publishing
+  kafka:
+    topic: ${OUTBOX_KAFKA_TOPIC:auth.events}
 
 logging:
   level:
